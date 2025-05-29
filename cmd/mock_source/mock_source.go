@@ -22,7 +22,6 @@ func main() {
 	stream, ok := source.GetStream("USD", "EUR")
 	if !ok {
 		log.Fatalln("stream not found")
-		return
 	}
 
 	go func() {

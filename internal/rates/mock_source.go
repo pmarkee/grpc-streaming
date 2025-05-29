@@ -10,7 +10,7 @@ import (
 type RateUpdate struct {
 	From      string
 	To        string
-	Rate      float64
+	Rate      float32
 	Timestamp time.Time
 }
 
@@ -75,8 +75,8 @@ func pairKey(from, to string) string {
 }
 
 // randomRate returns a mock exchange rate
-func randomRate(from, to string) float64 {
-	base := rand.Float64()*0.2 + 0.9 // Between 0.9 and 1.1
+func randomRate(from, to string) float32 {
+	base := rand.Float32()*0.2 + 0.9 // Between 0.9 and 1.1
 	switch pairKey(from, to) {
 	case "USD_EUR":
 		return base * 1.05

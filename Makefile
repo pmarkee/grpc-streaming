@@ -17,6 +17,10 @@ clean:
 deps:
 	go mod tidy
 
+.PHONY: generate
+generate:
+	protoc -I=api/proto --go_out=api/proto --go-grpc_out=api/proto api/proto/*.proto
+
 .PHONY: help
 help:
 	@echo "Available targets:"
@@ -24,3 +28,4 @@ help:
 	@echo "  make fmt       - Format the code"
 	@echo "  make clean     - Clean the build artifacts"
 	@echo "  make deps      - Install dependencies"
+	@echo "  make generaet  - Compile protobuf schemas"

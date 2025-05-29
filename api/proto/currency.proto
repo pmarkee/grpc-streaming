@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package currency;
+import "google/protobuf/timestamp.proto";
+
+option go_package = "./pb";
+
+service Currency {
+  rpc Subscribe(CurrencyPair) returns (stream CurrencyExchangeRate);
+}
+
+message CurrencyPair {
+  string from = 1;
+  string to = 2;
+}
+
+message CurrencyExchangeRate {
+  float rate = 1;
+  string from = 2;
+  string to = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
