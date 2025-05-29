@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/pmarkee/grpc-rate-streaming/internal/rates"
-	"log"
+	"github.com/rs/zerolog/log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,7 +21,7 @@ func main() {
 	source := rates.NewMockRateSource(ctx)
 	stream, ok := source.GetStream("USD", "EUR")
 	if !ok {
-		log.Fatalln("stream not found")
+		log.Fatal().Msg("stream not found")
 	}
 
 	go func() {
