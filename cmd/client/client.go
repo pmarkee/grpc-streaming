@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"io"
 	"os"
@@ -20,7 +20,12 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.TimeOnly})
 	ctx, cancel := context.WithCancel(context.Background())
 
-	grpcClient, err := grpc.NewClient("localhost:8080", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	creds, err := credentials.NewClientTLSFromFile("certs/server.crt", "localhost")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load TLS credentials")
+	}
+
+	grpcClient, err := grpc.NewClient("localhost:8080", grpc.WithTransportCredentials(creds))
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not establish gRPC client")
 	}

@@ -25,6 +25,11 @@ deps:
 generate:
 	protoc -I=api/proto --go_out=api/proto --go-grpc_out=api/proto api/proto/*.proto
 
+.PHONY: certs
+certs:
+	openssl genpkey -algorithm ED25519 -out certs/server.key
+	openssl req -new -x509 -key certs/server.key -days 365 -out certs/server.crt -config server-cert-config.cnf -extensions v3_req
+
 .PHONY: help
 help:
 	@echo "Available targets:"

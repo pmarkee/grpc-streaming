@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -106,10 +107,20 @@ func main() {
 		log.Error().Err(err).Msg("failed to create TCP listener")
 	}
 
-	s := grpc.NewServer(grpc.ChainStreamInterceptor(logging.StreamServerInterceptor(InterceptorLogger(log.Logger))))
+	creds, err := credentials.NewServerTLSFromFile("certs/server.crt", "certs/server.key")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load TLS credentials")
+	}
+
+	s := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.ChainStreamInterceptor(logging.StreamServerInterceptor(InterceptorLogger(log.Logger))),
+	)
+
 	reflection.Register(s)
 	pb.RegisterCurrencyServer(s, &server{source: source, ctx: ctx})
 	go func() {
+		log.Info().Msg("gRPC server starting up with TLS on port 8080")
 		if err := s.Serve(tcpListener); err != nil {
 			log.Fatal().Err(err).Msg("failed to start grpc server")
 		}
