@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/pmarkee/grpc-rate-streaming/internal/rates"
-	"github.com/rs/zerolog/log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,16 +12,13 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	source := rates.NewMockRateSource(ctx)
-	stream, ok := source.GetStream("USD", "EUR")
-	if !ok {
-		log.Fatal().Msg("stream not found")
-	}
+	source := rates.NewMockRateSource()
+	stream := source.Subscribe(ctx, "USD", "EUR")
+	defer source.Unsubscribe(cancel, stream)
 
 	go func() {
 		for rate := range stream {

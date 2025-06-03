@@ -11,6 +11,7 @@ for getting started.
 - 🔐 TLS encryption for secure communication
 - 🛠️ Makefile to automate common tasks
 - 🧪 Internal mock data source using Go channels
+- 🧵 Lightweight in-process pub-sub system to deliver real-time updates to multiple clients
 - 🛑 Graceful shutdown on both server and client
 - 📋 Structured logging via zerolog
 

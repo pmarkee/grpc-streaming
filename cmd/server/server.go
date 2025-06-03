@@ -32,10 +32,9 @@ func (s *server) Subscribe(in *pb.CurrencyPair, streamingServer grpc.ServerStrea
 		return status.Error(codes.InvalidArgument, "both 'from' and 'to' fields are required")
 	}
 
-	stream, ok := s.source.GetStream(in.From, in.To)
-	if !ok {
-		return status.Error(codes.NotFound, "stream does not exist")
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := s.source.Subscribe(ctx, in.From, in.To)
+	defer s.source.Unsubscribe(cancel, stream)
 
 	streamCtx := streamingServer.Context()
 	mainCtx := s.ctx
@@ -100,7 +99,7 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	source := rates.NewMockRateSource(ctx)
+	source := rates.NewMockRateSource()
 
 	tcpListener, err := net.Listen("tcp", ":8080")
 	if err != nil {

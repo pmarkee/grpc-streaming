@@ -14,37 +14,38 @@ type RateUpdate struct {
 	Timestamp time.Time
 }
 
-type RateStream <-chan RateUpdate
-
 type MockRateSource struct {
-	ctx     context.Context
-	streams map[string]RateStream
+	streams map[<-chan RateUpdate]struct{} // A Set would be more appropriate, but better not add a dependency just for this.
 	mu      sync.Mutex
 }
 
 // NewMockRateSource creates and starts a mock data source with one stream per currency pair.
-func NewMockRateSource(ctx context.Context) *MockRateSource {
-	return &MockRateSource{ctx: ctx, streams: make(map[string]RateStream)}
+func NewMockRateSource() *MockRateSource {
+	return &MockRateSource{streams: make(map[<-chan RateUpdate]struct{})}
 }
 
-// GetStream returns a read-only channel for the given currency pair.
-func (s *MockRateSource) GetStream(from, to string) (RateStream, bool) {
-	key := pairKey(from, to)
-
+// Subscribe returns a read-only channel for the given currency pair.
+func (s *MockRateSource) Subscribe(ctx context.Context, from, to string) <-chan RateUpdate {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if stream, ok := s.streams[key]; ok {
-		return stream, true
-	}
+	stream := startRateStream(ctx, from, to)
+	s.streams[stream] = struct{}{}
 
-	stream := startRateStream(s.ctx, from, to)
-	s.streams[key] = stream
-	return stream, true
+	return stream
 }
 
-// startRateStream starts a goroutine that emits rate updates every 2 seconds.
-func startRateStream(ctx context.Context, from, to string) RateStream {
+// Unsubscribe cancels the context for the given stream and removes it from the list of active streams.
+func (s *MockRateSource) Unsubscribe(cancel context.CancelFunc, stream <-chan RateUpdate) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cancel()
+	delete(s.streams, stream)
+}
+
+// startRateStream starts a goroutine that emits rate updates every second.
+func startRateStream(ctx context.Context, from, to string) <-chan RateUpdate {
 	ch := make(chan RateUpdate)
 
 	go func() {
@@ -60,7 +61,7 @@ func startRateStream(ctx context.Context, from, to string) RateStream {
 				ch <- RateUpdate{
 					From:      from,
 					To:        to,
-					Rate:      randomRate(from, to),
+					Rate:      randomRate(from, to), // Different clients will get different rates, but it doesn't matter for this demo.
 					Timestamp: t.UTC(),
 				}
 			}
