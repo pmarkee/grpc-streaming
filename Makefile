@@ -4,6 +4,10 @@ BUILD_DIR := bin
 server:
 	go build -o $(BUILD_DIR)/server ./cmd/server
 
+.PHONY: client
+client:
+	go build -o $(BUILD_DIR)/client ./cmd/client
+
 .PHONY: fmt
 fmt:
 	go fmt $(shell go list ./...)
@@ -25,7 +29,8 @@ generate:
 help:
 	@echo "Available targets:"
 	@echo "  make server    - Build the server executable"
+	@echo "  make client    - Build the client executable"
 	@echo "  make fmt       - Format the code"
 	@echo "  make clean     - Clean the build artifacts"
 	@echo "  make deps      - Install dependencies"
-	@echo "  make generaet  - Compile protobuf schemas"
+	@echo "  make generate  - Compile protobuf schemas"

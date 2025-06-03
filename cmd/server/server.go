@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/pmarkee/grpc-rate-streaming/api/proto/pb"
@@ -40,9 +41,9 @@ func (s *server) Subscribe(in *pb.CurrencyPair, streamingServer grpc.ServerStrea
 	for {
 		select {
 		case <-streamCtx.Done():
-			return streamCtx.Err() // this will be `context.Canceled` or `context.DeadlineExceeded`
+			return handleConnShutdown(streamCtx.Err())
 		case <-mainCtx.Done():
-			return status.Error(codes.Canceled, "connection closed by server")
+			return nil
 		case rate := <-stream:
 			msg := &pb.CurrencyExchangeRate{
 				Rate:      rate.Rate,
@@ -50,13 +51,23 @@ func (s *server) Subscribe(in *pb.CurrencyPair, streamingServer grpc.ServerStrea
 				To:        rate.To,
 				Timestamp: timestamppb.New(rate.Timestamp),
 			}
-			err := streamingServer.Send(msg)
-			if err != nil {
-				log.Printf("error sending to client: %v", err)
-				return err
+			if err := streamingServer.Send(msg); err != nil {
+				return handleConnShutdown(err)
 			}
 		}
 	}
+}
+
+func handleConnShutdown(err error) error {
+	if errors.Is(err, context.Canceled) {
+		log.Debug().Err(err).Msg("connection shut down by client")
+		return nil
+	}
+	if err != nil {
+		log.Error().Err(err).Msg("connection shut down unexpectedly")
+		return err
+	}
+	return nil
 }
 
 // InterceptorLogger adapts zerolog logger to interceptor logger.
@@ -105,7 +116,7 @@ func main() {
 	}()
 
 	<-signals
-	fmt.Println("\nShutting down...")
+	log.Info().Msg("shutting down")
 	cancel()
 	s.GracefulStop()
 }
