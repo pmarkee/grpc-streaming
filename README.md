@@ -14,6 +14,7 @@ for getting started.
 - 🧵 Lightweight in-process pub-sub system to deliver real-time updates to multiple clients
 - 🛑 Graceful shutdown on both server and client
 - 📋 Structured logging via zerolog
+- 🩺 Mocked periodic health checks
 
 ## How to use
 

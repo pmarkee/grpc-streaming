@@ -44,6 +44,11 @@ func (s *MockRateSource) Unsubscribe(cancel context.CancelFunc, stream <-chan Ra
 	delete(s.streams, stream)
 }
 
+// Healthy is a mock health check of the service
+func (s *MockRateSource) Healthy() bool {
+	return true
+}
+
 // startRateStream starts a goroutine that emits rate updates every second.
 func startRateStream(ctx context.Context, from, to string) <-chan RateUpdate {
 	ch := make(chan RateUpdate)

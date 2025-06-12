@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -116,6 +118,12 @@ func main() {
 		grpc.ChainStreamInterceptor(logging.StreamServerInterceptor(InterceptorLogger(log.Logger))),
 	)
 
+	// Health checking
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(s, healthServer)
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	go healthCheckWorker(ctx, source, healthServer)
+
 	reflection.Register(s)
 	pb.RegisterCurrencyServer(s, &server{source: source, ctx: ctx})
 	go func() {
@@ -129,4 +137,21 @@ func main() {
 	log.Info().Msg("shutting down")
 	cancel()
 	s.GracefulStop()
+}
+
+func healthCheckWorker(ctx context.Context, source *rates.MockRateSource, healthServer *health.Server) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			healthStatus := healthpb.HealthCheckResponse_SERVING
+			if !source.Healthy() {
+				healthStatus = healthpb.HealthCheckResponse_NOT_SERVING
+			}
+			healthServer.SetServingStatus("currency.Currency", healthStatus)
+		}
+	}
 }
