@@ -5,22 +5,27 @@ import (
 	"errors"
 	"fmt"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/ratelimit"
 	"github.com/pmarkee/grpc-rate-streaming/api/proto/pb"
 	"github.com/pmarkee/grpc-rate-streaming/internal/rates"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,12 +52,12 @@ func (s *server) Subscribe(in *pb.CurrencyPair, streamingServer grpc.ServerStrea
 			return handleConnShutdown(streamCtx.Err())
 		case <-mainCtx.Done():
 			return nil
-		case rate := <-stream:
+		case xchgRate := <-stream:
 			msg := &pb.CurrencyExchangeRate{
-				Rate:      rate.Rate,
-				From:      rate.From,
-				To:        rate.To,
-				Timestamp: timestamppb.New(rate.Timestamp),
+				Rate:      xchgRate.Rate,
+				From:      xchgRate.From,
+				To:        xchgRate.To,
+				Timestamp: timestamppb.New(xchgRate.Timestamp),
 			}
 			if err := streamingServer.Send(msg); err != nil {
 				return handleConnShutdown(err)
@@ -111,6 +116,62 @@ func apiKeyInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamS
 	return handler(srv, ss)
 }
 
+var (
+	ipLimiters sync.Map
+	globalRate = rate.Every(1 * time.Second)
+	burstSize  = 10
+)
+
+func getLimiter(ip string) *rate.Limiter {
+	limiter, _ := ipLimiters.LoadOrStore(ip, rate.NewLimiter(globalRate, burstSize))
+	return limiter.(*rate.Limiter)
+}
+
+func extractIP(ctx context.Context) (string, error) {
+	// From gRPC peer (direct connection)
+	p, ok := peer.FromContext(ctx)
+	if ok {
+		host, _, err := net.SplitHostPort(p.Addr.String())
+		if err == nil {
+			return host, nil
+		}
+	}
+
+	// From headers (e.g., behind proxy/LB)
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		if xff := md.Get("x-forwarded-for"); len(xff) > 0 {
+			return strings.Split(xff[0], ",")[0], nil
+		}
+		if xrip := md.Get("x-real-ip"); len(xrip) > 0 {
+			return xrip[0], nil
+		}
+	}
+
+	return "", status.Error(codes.InvalidArgument, "IP not found")
+}
+
+type perIpRateLimiter struct{}
+
+func (p *perIpRateLimiter) Limit(ctx context.Context) error {
+	ip, err := extractIP(ctx)
+	if err != nil {
+		return err
+	}
+
+	limiter := getLimiter(ip)
+	if !limiter.Allow() {
+		return status.Errorf(
+			codes.ResourceExhausted,
+			"stream rate limit exceeded for IP %s (try again in %v)",
+			ip,
+			limiter.Reserve().Delay(),
+		)
+	}
+
+	return nil
+}
+
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.TimeOnly})
 
@@ -131,10 +192,13 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to load TLS credentials")
 	}
 
+	limiter := &perIpRateLimiter{}
+
 	s := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.ChainStreamInterceptor(
 			logging.StreamServerInterceptor(InterceptorLogger(log.Logger)),
+			ratelimit.StreamServerInterceptor(limiter),
 			apiKeyInterceptor,
 		),
 	)
