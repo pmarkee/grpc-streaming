@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"io"
 	"maps"
@@ -79,6 +80,11 @@ func main() {
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.TimeOnly})
 	ctx, cancel := context.WithCancel(context.Background())
+
+	ctx = metadata.AppendToOutgoingContext(
+		ctx,
+		"x-api-key", "super-secret-api-key",
+	)
 
 	creds, err := credentials.NewClientTLSFromFile(config.CACert, "")
 	if err != nil {

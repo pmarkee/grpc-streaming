@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -93,6 +94,23 @@ func InterceptorLogger(l zerolog.Logger) logging.Logger {
 	})
 }
 
+var apiKeys = map[string]bool{"super-secret-api-key": true}
+
+// apiKeyInterceptor checks for API key validity
+func apiKeyInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	md, ok := metadata.FromIncomingContext(ss.Context())
+	if !ok {
+		return status.Error(codes.Unauthenticated, "missing metadata")
+	}
+
+	apiKeyHeaders := md.Get("x-api-key")
+	if len(apiKeyHeaders) == 0 || !apiKeys[apiKeyHeaders[0]] {
+		return status.Error(codes.Unauthenticated, "invalid API key")
+	}
+
+	return handler(srv, ss)
+}
+
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.TimeOnly})
 
@@ -115,7 +133,10 @@ func main() {
 
 	s := grpc.NewServer(
 		grpc.Creds(creds),
-		grpc.ChainStreamInterceptor(logging.StreamServerInterceptor(InterceptorLogger(log.Logger))),
+		grpc.ChainStreamInterceptor(
+			logging.StreamServerInterceptor(InterceptorLogger(log.Logger)),
+			apiKeyInterceptor,
+		),
 	)
 
 	// Health checking
