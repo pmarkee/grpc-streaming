@@ -15,6 +15,7 @@ for getting started.
 - 🛑 Graceful shutdown on both server and client
 - 📋 Structured logging via zerolog
 - 🩺 Mocked periodic health checks
+- ⏳ IP-based rate limiting
 
 ## How to use
 
@@ -56,5 +57,7 @@ The project loosely follows the [Standard Project Layout](https://github.com/gol
 
 - executables are found in `/cmd` (with `/bin` containing the built executables)
 - `/api/proto` contains the gRPC proto files (in this case, just a  single one) and the generated server and client boilerplate in the `/api/proto/pb` directory
-- `/internal` in this case only contains the mock data source
+- `/internal/interceptors` contains auth and rate limiting interceptors
+- `/internal/rates` contains the mock data source
+- `/internal/server` contains the implementation of the currency service
 - `/certs` contains the locally generated self-signed x509 key and cert - this is not version controlled, generate via `make certs`
